@@ -43,6 +43,8 @@ export function GlobeMap({
     if (!container) return
 
     let cancelled = false
+    let lastTouchPickAt = 0
+    let cleanupTouch: (() => void) | null = null
 
     async function init() {
       const maplibregl = await import('maplibre-gl')
@@ -81,8 +83,9 @@ export function GlobeMap({
         })
       })
 
-      const pickAt = (point: MapLibreGL.Point) => {
-        let hits = map.queryRenderedFeatures(point, { layers: ['candidates-fill'] })
+      const pickAt = (point: { x: number; y: number }) => {
+        const p = new maplibregl.Point(point.x, point.y)
+        let hits = map.queryRenderedFeatures(p, { layers: ['candidates-fill'] })
         if (!hits.length) {
           // forgive near-boundary / tiny-polygon misses with a small padded box
           const pad = 8
@@ -108,13 +111,43 @@ export function GlobeMap({
         map.getCanvas().style.cursor = hits.length ? 'pointer' : ''
       })
 
-      map.on('click', (e) => pickAt(e.point))
+      map.on('click', (e) => {
+        // Safari touchend already handled the tap — skip the synthesized click
+        if (Date.now() - lastTouchPickAt < 700) return
+        pickAt(e.point)
+      })
+
+      // Some iOS Safari versions never fire the synthesized tap->click, so
+      // pick directly from touchend (taps only — not pans/pinches).
+      let touchStart: { x: number; y: number; t: number } | null = null
+      const onTouchStart = (ev: TouchEvent) => {
+        const t = ev.changedTouches[0]
+        touchStart = t ? { x: t.clientX, y: t.clientY, t: Date.now() } : null
+      }
+      const onTouchEnd = (ev: TouchEvent) => {
+        const start = touchStart
+        const t = ev.changedTouches[0]
+        if (!start || !t) return
+        const moved = Math.hypot(t.clientX - start.x, t.clientY - start.y)
+        if (moved > 12 || Date.now() - start.t > 600) return
+        lastTouchPickAt = Date.now()
+        pickAt({ x: t.clientX, y: t.clientY })
+      }
+      const el = containerRef.current
+      if (!el) return
+      el.addEventListener('touchstart', onTouchStart, { passive: true })
+      el.addEventListener('touchend', onTouchEnd, { passive: true })
+      cleanupTouch = () => {
+        el.removeEventListener('touchstart', onTouchStart)
+        el.removeEventListener('touchend', onTouchEnd)
+      }
     }
 
     init()
 
     return () => {
       cancelled = true
+      cleanupTouch?.()
       mapRef.current?.remove()
       mapRef.current = null
     }
