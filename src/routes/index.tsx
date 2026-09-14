@@ -156,6 +156,7 @@ function Home() {
     <main className="fixed inset-0 overflow-hidden bg-[#05070d] text-white">
       <GlobeMap
         candidates={candidates}
+        dataKey={state.completed ? 'done' : (levelId ?? 'none')}
         wrongGroups={wrongGroups}
         solvedGroups={solvedGroups}
         fitBounds={fitBounds}

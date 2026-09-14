@@ -13,6 +13,7 @@ const WORLD_BOUNDS: [[number, number], [number, number]] = [
 
 interface GlobeMapProps {
   candidates: Candidate[] | null
+  dataKey: string
   wrongGroups: string[]
   solvedGroups: string[]
   fitBounds: [[number, number], [number, number]] | null
@@ -23,6 +24,7 @@ interface GlobeMapProps {
 
 export function GlobeMap({
   candidates,
+  dataKey,
   wrongGroups,
   solvedGroups,
   fitBounds,
@@ -45,6 +47,10 @@ export function GlobeMap({
   pickRef.current = onPick
   const candidatesRef = useRef(candidates)
   candidatesRef.current = candidates
+  const appliedDataRef = useRef<{ key: string; data: Candidate[] | null } | null>(null)
+  // A tap is only honored once the data for the CURRENT level has been applied.
+  // This kills the race where a click at a level switch hits stale polygons.
+  const dataReadyRef = useRef<{ key: string; ready: boolean }>({ key: '', ready: false })
 
   useEffect(() => {
     const container = containerRef.current
@@ -92,6 +98,7 @@ export function GlobeMap({
 
       const pickAt = (point: { x: number; y: number }) => {
         if (!candidatesRef.current) return // data loading for this step — ignore taps
+        if (!dataReadyRef.current.ready) return
         try {
           const p = new maplibregl.Point(point.x, point.y)
           let hits = map.queryRenderedFeatures(p, { layers: ['candidates-fill'] })
@@ -210,39 +217,45 @@ export function GlobeMap({
 
   // Candidate polygons — data only; coloring is handled by the paint effect below
   useEffect(() => {
+    dataReadyRef.current = { key: dataKey, ready: false }
     const map = mapRef.current
     if (!map) return
 
     const apply = () => {
-      const collection: FeatureCollection = {
-        type: 'FeatureCollection',
-        features: (candidates ?? []).map((c) => ({
-          type: 'Feature',
-          properties: {
-            candidateId: c.id,
-            name: c.name,
-            groupName: c.groupName ?? '',
-          },
-          geometry: c.geometry,
-        })),
-      }
+      const applied = appliedDataRef.current
+      if (!applied || applied.key !== dataKey || applied.data !== candidates) {
+        const collection: FeatureCollection = {
+          type: 'FeatureCollection',
+          features: (candidates ?? []).map((c) => ({
+            type: 'Feature',
+            properties: {
+              candidateId: c.id,
+              name: c.name,
+              groupName: c.groupName ?? '',
+            },
+            geometry: c.geometry,
+          })),
+        }
 
-      const source = map.getSource('candidates') as MapLibreGL.GeoJSONSource | undefined
-      setDebug((d) => ({ ...d, candidates: String((candidates ?? []).length) }))
-      if (source) {
-        source.setData(collection)
-      } else {
-        map.addSource('candidates', { type: 'geojson', data: collection })
-        map.addLayer({
-          id: 'candidates-fill',
-          type: 'fill',
-          source: 'candidates',
-          paint: {
-            'fill-color': 'rgba(255,255,255,0.10)',
-            'fill-outline-color': 'rgba(255,255,255,0.45)',
-          },
-        })
+        const source = map.getSource('candidates') as MapLibreGL.GeoJSONSource | undefined
+        setDebug((d) => ({ ...d, candidates: String((candidates ?? []).length) }))
+        if (source) {
+          source.setData(collection)
+        } else {
+          map.addSource('candidates', { type: 'geojson', data: collection })
+          map.addLayer({
+            id: 'candidates-fill',
+            type: 'fill',
+            source: 'candidates',
+            paint: {
+              'fill-color': 'rgba(255,255,255,0.10)',
+              'fill-outline-color': 'rgba(255,255,255,0.45)',
+            },
+          })
+        }
       }
+      appliedDataRef.current = { key: dataKey, data: candidates }
+      dataReadyRef.current = { key: dataKey, ready: true }
     }
 
     if (map.isStyleLoaded()) {
@@ -251,7 +264,7 @@ export function GlobeMap({
       // 'idle' re-fires after every render settle, unlike 'load' which only fires once
       map.once('idle', apply)
     }
-  }, [candidates])
+  }, [candidates, dataKey])
 
   // Red/green paint — cheap paint-property update, no data re-serialization
   useEffect(() => {
