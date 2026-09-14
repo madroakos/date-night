@@ -113,13 +113,15 @@ export async function loadCountries(): Promise<Candidate[]> {
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-/** Continent-level candidates: every country polygon tagged with its Natural Earth continent. */
+/** Continent-level candidates: every country polygon tagged with its Natural Earth continent.
+ *  All polygons of a continent share one candidate id (`continent-Europe`, …), so a wrong
+ *  guess paints the entire continent red and the solved one green. */
 export async function loadContinentCandidates(): Promise<Candidate[]> {
   const features = await fetchFeatures(NE_COUNTRIES)
   return features
-    .map((f, i) => {
+    .map((f) => {
       const continent = String(f.properties.CONTINENT ?? f.properties.continent ?? '')
-      return candidate(f, `continent-${i}`, continent, 'continent', continent)
+      return candidate(f, `continent-${continent}`, continent, 'continent', continent)
     })
     .filter((c) => c.groupName && c.groupName !== 'Seven seas (open ocean)')
 }

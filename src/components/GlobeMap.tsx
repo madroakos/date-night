@@ -81,13 +81,19 @@ export function GlobeMap({
         })
       })
 
-      map.on('mousemove', (e) => {
-        const hits = map.queryRenderedFeatures(e.point, { layers: ['candidates-fill'] })
-        map.getCanvas().style.cursor = hits.length ? 'pointer' : ''
-      })
-
-      map.on('click', (e) => {
-        const hits = map.queryRenderedFeatures(e.point, { layers: ['candidates-fill'] })
+      const pickAt = (point: MapLibreGL.Point) => {
+        let hits = map.queryRenderedFeatures(point, { layers: ['candidates-fill'] })
+        if (!hits.length) {
+          // forgive near-boundary / tiny-polygon misses with a small padded box
+          const pad = 8
+          hits = map.queryRenderedFeatures(
+            [
+              [point.x - pad, point.y - pad],
+              [point.x + pad, point.y + pad],
+            ],
+            { layers: ['candidates-fill'] },
+          )
+        }
         const hit = hits[0]
         if (!hit) return
         pickRef.current(
@@ -95,7 +101,14 @@ export function GlobeMap({
           hit.properties?.groupName ? String(hit.properties.groupName) : undefined,
           String(hit.properties?.name ?? ''),
         )
+      }
+
+      map.on('mousemove', (e) => {
+        const hits = map.queryRenderedFeatures(e.point, { layers: ['candidates-fill'] })
+        map.getCanvas().style.cursor = hits.length ? 'pointer' : ''
       })
+
+      map.on('click', (e) => pickAt(e.point))
     }
 
     init()
