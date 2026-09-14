@@ -43,6 +43,8 @@ export function GlobeMap({
   const placeLayersRef = useRef<{ id: string; filter: MapLibreGL.FilterSpecification | null }[] | null>(null)
   const pickRef = useRef(onPick)
   pickRef.current = onPick
+  const candidatesRef = useRef(candidates)
+  candidatesRef.current = candidates
 
   useEffect(() => {
     const container = containerRef.current
@@ -89,6 +91,7 @@ export function GlobeMap({
       })
 
       const pickAt = (point: { x: number; y: number }) => {
+        if (!candidatesRef.current) return // data loading for this step — ignore taps
         try {
           const p = new maplibregl.Point(point.x, point.y)
           let hits = map.queryRenderedFeatures(p, { layers: ['candidates-fill'] })

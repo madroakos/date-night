@@ -31,6 +31,18 @@ const BUDAPEST_DISTRICTS = new Set(
 const CITY_DISTRACTORS = new Set(['Vác', 'Szob', 'Szentendre', 'Cegléd', 'Nagykáta', 'Dunakeszi'])
 
 const cache = new Map<string, Promise<RawFeature[]>>()
+const builtCache = new Map<string, Promise<Candidate[]>>()
+
+/** Build (once) and memoize a candidate list — callers get the SAME array
+ *  reference on every call so the map can skip redundant setData swaps. */
+function built(key: string, build: () => Promise<Candidate[]>): Promise<Candidate[]> {
+  let cached = builtCache.get(key)
+  if (!cached) {
+    cached = build()
+    builtCache.set(key, cached)
+  }
+  return cached
+}
 
 function fetchFeatures(url: string): Promise<RawFeature[]> {
   let cached = cache.get(url)
@@ -102,29 +114,31 @@ function candidate(
   }
 }
 
-export async function loadCountries(): Promise<Candidate[]> {
-  const features = await fetchFeatures(NE_COUNTRIES)
-  return features
-    .map((f, i) => {
-      const name = String(f.properties.NAME ?? f.properties.name ?? `Country ${i}`)
-      const continent = String(f.properties.CONTINENT ?? f.properties.continent ?? '')
-      return candidate(f, `country-${i}`, name, 'country', continent)
-    })
-    .filter((c) => c.groupName !== 'Seven seas (open ocean)')
-    .sort((a, b) => a.name.localeCompare(b.name))
+export function loadCountries(): Promise<Candidate[]> {
+  return loadWorldCandidates()
 }
 
 /** Continent-level candidates: every country polygon tagged with its Natural Earth continent.
  *  All polygons of a continent share one candidate id (`continent-Europe`, …), so a wrong
  *  guess paints the entire continent red and the solved one green. */
-export async function loadContinentCandidates(): Promise<Candidate[]> {
-  const features = await fetchFeatures(NE_COUNTRIES)
-  return features
-    .map((f) => {
-      const continent = String(f.properties.CONTINENT ?? f.properties.continent ?? '')
-      return candidate(f, `continent-${continent}`, continent, 'continent', continent)
-    })
-    .filter((c) => c.groupName && c.groupName !== 'Seven seas (open ocean)')
+/** One world dataset shared by the Földrész and Ország steps — same array
+ *  reference for both, so switching between them never touches the map data.
+ *  Each polygon: name = country, groupName = continent. */
+export function loadWorldCandidates(): Promise<Candidate[]> {
+  return built('world', async () => {
+    const features = await fetchFeatures(NE_COUNTRIES)
+    return features
+      .map((f, i) => {
+        const name = String(f.properties.NAME ?? f.properties.name ?? `Country ${i}`)
+        const continent = String(f.properties.CONTINENT ?? f.properties.continent ?? '')
+        return candidate(f, `world-${i}`, name, 'continent', continent)
+      })
+      .filter((c) => c.groupName !== 'Seven seas (open ocean)')
+  })
+}
+
+export function loadContinentCandidates(): Promise<Candidate[]> {
+  return loadWorldCandidates()
 }
 
 /** Europe bbox for framing the country step (Russia excluded — it stretches to the Pacific). */
@@ -139,10 +153,13 @@ export async function loadEuropeBbox(): Promise<[number, number, number, number]
   return bboxes.length ? unionBbox(bboxes) : ([-10, 35, 40, 70] as [number, number, number, number])
 }
 
-export async function loadCounties(): Promise<Candidate[]> {  const features = await fetchFeatures(HUN_ADM1)
-  return features.map((f, i) => {
-    const name = String(f.properties.shapeName ?? `County ${i}`)
-    return candidate(f, `state-${i}`, name, 'state', name)
+export async function loadCounties(): Promise<Candidate[]> {
+  return built('counties', async () => {
+    const features = await fetchFeatures(HUN_ADM1)
+    return features.map((f, i) => {
+      const name = String(f.properties.shapeName ?? `County ${i}`)
+      return candidate(f, `state-${i}`, name, 'state', name)
+    })
   })
 }
 
@@ -150,33 +167,32 @@ async function loadAdm2(): Promise<RawFeature[]> {
   return fetchFeatures(HUN_ADM2)
 }
 
-/** City-level candidates: Budapest (all 23 districts grouped) + a few Pest-county distractors. */
-export async function loadCityCandidates(): Promise<Candidate[]> {
-  const features = await loadAdm2()
-  const out: Candidate[] = []
-  const districts: RawFeature[] = []
+/** One Budapest dataset shared by the Város and Kerület steps (same array
+ *  reference for both): the 23 kerület grouped under 'Budapest' plus a few
+ *  Pest-county distractor towns. */
+export function loadCityCandidates(): Promise<Candidate[]> {
+  return built('budapest', async () => {
+    const features = await loadAdm2()
+    const out: Candidate[] = []
+    let districts = 0
 
-  features.forEach((f, i) => {
-    const name = String(f.properties.shapeName ?? '')
-    if (BUDAPEST_DISTRICTS.has(name)) {
-      districts.push(f)
-      out.push(candidate(f, `city-bud-${i}`, name, 'city', 'Budapest'))
-    } else if (CITY_DISTRACTORS.has(name)) {
-      out.push(candidate(f, `city-other-${i}`, name, 'city', name))
-    }
+    features.forEach((f, i) => {
+      const name = String(f.properties.shapeName ?? '')
+      if (BUDAPEST_DISTRICTS.has(name)) {
+        districts++
+        out.push(candidate(f, `city-bud-${i}`, name, 'city', 'Budapest'))
+      } else if (CITY_DISTRACTORS.has(name)) {
+        out.push(candidate(f, `city-other-${i}`, name, 'city', name))
+      }
+    })
+
+    if (!districts) throw new Error('Budapest districts missing from ADM2 data')
+    return out
   })
-
-  if (!districts.length) throw new Error('Budapest districts missing from ADM2 data')
-  return out
 }
 
-export async function loadDistrictCandidates(): Promise<Candidate[]> {
-  const features = await loadAdm2()
-  return features
-    .map((f, i) => ({ f, i, name: String(f.properties.shapeName ?? '') }))
-    .filter(({ name }) => BUDAPEST_DISTRICTS.has(name))
-    .sort((a, b) => a.name.localeCompare(b.name, 'hu'))
-    .map(({ f, i, name }) => candidate(f, `district-${i}`, name, 'district', name))
+export function loadDistrictCandidates(): Promise<Candidate[]> {
+  return loadCityCandidates()
 }
 
 export async function loadBudapestBbox(): Promise<[number, number, number, number]> {

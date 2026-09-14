@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { GlobeMap, WORLD_BOUNDS } from '../components/GlobeMap'
 import {
@@ -37,48 +37,64 @@ function Home() {
     loadDistrictCandidates().catch(() => {})
   }, [])
 
-  // Load candidates + frame the parent area for the current level
+  // Load candidates + frame the parent area for the current level.
+  // Levels grouped over the SAME dataset (Földrész/Ország → world,
+  // Város/Kerület → Budapest) share one memoized array, so those
+  // transitions swap zero map data.
+  const activeDataGroupRef = useRef<string | null>(null)
   useEffect(() => {
     let cancelled = false
     setError(null)
 
+    const dataGroup =
+      levelId === 'continent' || levelId === 'country'
+        ? 'world'
+        : levelId === 'state'
+          ? 'counties'
+          : levelId === 'city' || levelId === 'district'
+            ? 'budapest'
+            : null
+
     async function run() {
       try {
         if (state.completed || !currentLevel || !currentUnlocked) {
+          activeDataGroupRef.current = null
           setCandidates(null)
           return
         }
+
+        if (dataGroup && dataGroup === activeDataGroupRef.current) {
+          // same dataset already on the map — nothing to swap
+          return
+        }
+        activeDataGroupRef.current = dataGroup
         setCandidates(null)
 
         if (levelId === 'continent') {
           setFitBounds(WORLD_BOUNDS)
-          const list = await loadContinentCandidates()
-          if (!cancelled) setCandidates(list)
+          if (!cancelled) setCandidates(await loadContinentCandidates())
         } else if (levelId === 'country') {
           setFitBounds(bboxToBounds(await loadEuropeBbox()))
-          const list = await loadCountries()
-          if (!cancelled) setCandidates(list)
+          if (!cancelled) setCandidates(await loadCountries())
         } else if (levelId === 'state') {
           const countries = await loadCountries()
           if (cancelled) return
           const hungary = countries.find((c) => c.name === 'Hungary')
           setFitBounds(hungary ? bboxToBounds(hungary.bbox) : WORLD_BOUNDS)
-          const list = await loadCounties()
-          if (!cancelled) setCandidates(list)
+          if (!cancelled) setCandidates(await loadCounties())
         } else if (levelId === 'city') {
           const counties = await loadCounties()
           if (cancelled) return
           const pest = counties.find((c) => c.name === 'Pest')
           if (pest) setFitBounds(bboxToBounds(pest.bbox))
-          const list = await loadCityCandidates()
-          if (!cancelled) setCandidates(list)
+          if (!cancelled) setCandidates(await loadCityCandidates())
         } else if (levelId === 'district') {
           setFitBounds(bboxToBounds(await loadBudapestBbox()))
-          const list = await loadDistrictCandidates()
-          if (!cancelled) setCandidates(list)
+          if (!cancelled) setCandidates(await loadDistrictCandidates())
         }
       } catch (e) {
         if (!cancelled) {
+          activeDataGroupRef.current = null
           setCandidates(null)
           setError(e instanceof Error ? e.message : 'Failed to load map data')
         }
