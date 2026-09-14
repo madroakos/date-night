@@ -9,7 +9,7 @@ export interface JourneyState {
   completed: boolean
 }
 
-const STORAGE_KEY = 'date-night-progress'
+const STORAGE_KEY = 'date-night-progress-v2'
 
 const emptyWrong = () =>
   Object.fromEntries(LEVELS.map((l) => [l.id, [] as string[]])) as Record<LevelId, string[]>

@@ -133,8 +133,8 @@ export function GlobeMap({
 
       const isTap = (x: number, y: number) =>
         down !== null &&
-        Math.hypot(x - down.x, y - down.y) < 12 &&
-        Date.now() - down.t < 700
+        Math.hypot(x - down.x, y - down.y) < 15 &&
+        Date.now() - down.t < 1500
 
       const toCanvasPoint = (clientX: number, clientY: number) => {
         // iOS Safari: fixed canvas can be offset from the visual viewport
@@ -313,9 +313,9 @@ export function GlobeMap({
   // Camera framing
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !fitBounds) return
+    if (!map || !mapReady || !fitBounds) return
     map.fitBounds(fitBounds, { padding: 60, duration: 1600, maxZoom: 12 })
-  }, [fitBounds])
+  }, [fitBounds, mapReady])
 
   // Final fly-to + marker
   useEffect(() => {
