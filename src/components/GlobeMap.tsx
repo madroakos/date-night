@@ -34,6 +34,12 @@ export function GlobeMap({
   const mapRef = useRef<MapLibreGL.Map | null>(null)
   const maplibreRef = useRef<typeof MapLibreGL | null>(null)
   const [mapReady, setMapReady] = useState(false)
+  const [debug, setDebug] = useState<{ lastGesture: string; lastError: string; candidates: string }>({
+    lastGesture: '-',
+    lastError: '',
+    candidates: '-',
+  })
+  const debugOn = typeof window !== 'undefined' && window.location.search.includes('debug')
   const placeLayersRef = useRef<{ id: string; filter: MapLibreGL.FilterSpecification | null }[] | null>(null)
   const pickRef = useRef(onPick)
   pickRef.current = onPick
@@ -105,6 +111,7 @@ export function GlobeMap({
             String(hit.properties?.name ?? ''),
           )
         } catch (err) {
+          setDebug((d) => ({ ...d, lastError: String(err) }))
           console.error('[map] pick failed', err)
         }
       }
@@ -126,14 +133,27 @@ export function GlobeMap({
         Math.hypot(x - down.x, y - down.y) < 12 &&
         Date.now() - down.t < 700
 
-      const tryPick = (x: number, y: number) => {
+      const toCanvasPoint = (clientX: number, clientY: number) => {
+        // iOS Safari: fixed canvas can be offset from the visual viewport
+        // (toolbars) and the page can be scrolled — always convert to canvas space
+        const rect = containerRef.current?.getBoundingClientRect()
+        return {
+          x: clientX - (rect?.left ?? 0),
+          y: clientY - (rect?.top ?? 0),
+        }
+      }
+
+      const tryPick = (clientX: number, clientY: number) => {
         if (Date.now() - lastPickAt < 500) return
         lastPickAt = Date.now()
+        const { x, y } = toCanvasPoint(clientX, clientY)
+        setDebug((d) => ({ ...d, lastGesture: `up@${Math.round(x)},${Math.round(y)}` }))
         pickAt({ x, y })
       }
 
       const onDown = (x: number, y: number) => {
         down = { x, y, t: Date.now() }
+        setDebug((d) => ({ ...d, lastGesture: `down@${Math.round(x)},${Math.round(y)}` }))
       }
       const onUp = (x: number, y: number) => {
         if (isTap(x, y)) tryPick(x, y)
@@ -151,6 +171,10 @@ export function GlobeMap({
         if (t) onUp(t.clientX, t.clientY)
       }
 
+      const onViewportResize = () => map.resize()
+      window.addEventListener('resize', onViewportResize)
+      window.visualViewport?.addEventListener('resize', onViewportResize)
+
       window.addEventListener('pointerdown', onPointerDown, { capture: true })
       window.addEventListener('pointerup', onPointerUp, { capture: true })
       window.addEventListener('touchstart', onTouchStart, { capture: true, passive: true })
@@ -162,6 +186,8 @@ export function GlobeMap({
       })
 
       cleanupTouch = () => {
+        window.removeEventListener('resize', onViewportResize)
+        window.visualViewport?.removeEventListener('resize', onViewportResize)
         window.removeEventListener('pointerdown', onPointerDown, { capture: true } as EventListenerOptions)
         window.removeEventListener('pointerup', onPointerUp, { capture: true } as EventListenerOptions)
         window.removeEventListener('touchstart', onTouchStart, { capture: true } as EventListenerOptions)
@@ -199,6 +225,7 @@ export function GlobeMap({
       }
 
       const source = map.getSource('candidates') as MapLibreGL.GeoJSONSource | undefined
+      setDebug((d) => ({ ...d, candidates: String((candidates ?? []).length) }))
       if (source) {
         source.setData(collection)
       } else {
@@ -311,12 +338,23 @@ export function GlobeMap({
   }, [completed, mapReady])
 
   return (
-    <div
-      ref={containerRef}
-      className="absolute inset-0"
-      style={{ position: 'absolute' }}
-      aria-label="Világtérkép"
-    />
+    <>
+      <div
+        ref={containerRef}
+        className="absolute inset-0"
+        style={{ position: 'absolute' }}
+        aria-label="Világtérkép"
+      />
+      {debugOn && (
+        <div className="pointer-events-none absolute bottom-16 left-2 z-20 rounded-lg bg-black/80 px-2 py-1 text-[10px] leading-4 text-lime-300">
+          gesture: {debug.lastGesture}
+          <br />
+          candidates: {debug.candidates}
+          <br />
+          error: {debug.lastError || 'none'}
+        </div>
+      )}
+    </>
   )
 }
 
