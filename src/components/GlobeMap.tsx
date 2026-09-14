@@ -48,6 +48,23 @@ export function GlobeMap({
   const candidatesRef = useRef(candidates)
   candidatesRef.current = candidates
   const appliedDataRef = useRef<{ key: string; data: Candidate[] | null } | null>(null)
+  const styleReadyRef = useRef(false)
+
+  /** Apply a style-level change immediately once the base style exists.
+   *  Never wait on 'idle' — that only fires after ALL tiles load, which on a
+   *  slow connection delays paint/label/data changes by many seconds. */
+  function runWhenStyled(map: MapLibreGL.Map, fn: () => void) {
+    const safe = () => {
+      try {
+        fn()
+      } catch {
+        // style mid-reload — retry once it (re)loads
+        map.once('style.load', fn)
+      }
+    }
+    if (styleReadyRef.current) safe()
+    else map.once('style.load', safe)
+  }
   // A tap is only honored once the data for the CURRENT level has been applied.
   // This kills the race where a click at a level switch hits stale polygons.
   const dataReadyRef = useRef<{ key: string; ready: boolean }>({ key: '', ready: false })
@@ -86,6 +103,7 @@ export function GlobeMap({
       )
 
       map.on('style.load', () => {
+        styleReadyRef.current = true
         map.setProjection({ type: 'globe' })
         map.setSky({
           'sky-color': '#0a0e1a',
@@ -258,13 +276,8 @@ export function GlobeMap({
       dataReadyRef.current = { key: dataKey, ready: true }
     }
 
-    if (map.isStyleLoaded()) {
-      apply()
-    } else {
-      // 'idle' re-fires after every render settle, unlike 'load' which only fires once
-      map.once('idle', apply)
-    }
-  }, [candidates, dataKey])
+    runWhenStyled(map, apply)
+  }, [candidates, dataKey, mapReady])
 
   // Red/green paint — cheap paint-property update, no data re-serialization
   useEffect(() => {
@@ -283,8 +296,7 @@ export function GlobeMap({
       ])
     }
 
-    if (map.isStyleLoaded()) applyPaint()
-    else map.once('idle', applyPaint)
+    runWhenStyled(map, applyPaint)
   }, [wrongGroups, solvedGroups, mapReady])
 
   // Show only place labels relevant to the current level
@@ -319,8 +331,7 @@ export function GlobeMap({
       }
     }
 
-    if (map.isStyleLoaded()) applyLabels()
-    else map.once('idle', applyLabels)
+    runWhenStyled(map, applyLabels)
   }, [labelClasses, mapReady])
 
   // Camera framing
