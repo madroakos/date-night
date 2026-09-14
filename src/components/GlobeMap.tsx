@@ -43,7 +43,6 @@ export function GlobeMap({
     if (!container) return
 
     let cancelled = false
-    let lastTouchPickAt = 0
     let cleanupTouch: (() => void) | null = null
 
     async function init() {
@@ -84,26 +83,30 @@ export function GlobeMap({
       })
 
       const pickAt = (point: { x: number; y: number }) => {
-        const p = new maplibregl.Point(point.x, point.y)
-        let hits = map.queryRenderedFeatures(p, { layers: ['candidates-fill'] })
-        if (!hits.length) {
-          // forgive near-boundary / tiny-polygon misses with a small padded box
-          const pad = 8
-          hits = map.queryRenderedFeatures(
-            [
-              [point.x - pad, point.y - pad],
-              [point.x + pad, point.y + pad],
-            ],
-            { layers: ['candidates-fill'] },
+        try {
+          const p = new maplibregl.Point(point.x, point.y)
+          let hits = map.queryRenderedFeatures(p, { layers: ['candidates-fill'] })
+          if (!hits.length) {
+            // forgive near-boundary / tiny-polygon misses with a small padded box
+            const pad = 12
+            hits = map.queryRenderedFeatures(
+              [
+                [point.x - pad, point.y - pad],
+                [point.x + pad, point.y + pad],
+              ],
+              { layers: ['candidates-fill'] },
+            )
+          }
+          const hit = hits[0]
+          if (!hit) return
+          pickRef.current(
+            String(hit.properties?.candidateId),
+            hit.properties?.groupName ? String(hit.properties.groupName) : undefined,
+            String(hit.properties?.name ?? ''),
           )
+        } catch (err) {
+          console.error('[map] pick failed', err)
         }
-        const hit = hits[0]
-        if (!hit) return
-        pickRef.current(
-          String(hit.properties?.candidateId),
-          hit.properties?.groupName ? String(hit.properties.groupName) : undefined,
-          String(hit.properties?.name ?? ''),
-        )
       }
 
       map.on('mousemove', (e) => {
@@ -111,35 +114,58 @@ export function GlobeMap({
         map.getCanvas().style.cursor = hits.length ? 'pointer' : ''
       })
 
+      // Unified tap detection: capture-phase listeners on `window` so no element
+      // (canvas, overlay, or browser quirk) can swallow the gesture. Handles
+      // Pointer Events where available and touch events as fallback; browsers
+      // that synthesize `click` after a tap are deduped via `lastPickAt`.
+      let down: { x: number; y: number; t: number } | null = null
+      let lastPickAt = 0
+
+      const isTap = (x: number, y: number) =>
+        down !== null &&
+        Math.hypot(x - down.x, y - down.y) < 12 &&
+        Date.now() - down.t < 700
+
+      const tryPick = (x: number, y: number) => {
+        if (Date.now() - lastPickAt < 500) return
+        lastPickAt = Date.now()
+        pickAt({ x, y })
+      }
+
+      const onDown = (x: number, y: number) => {
+        down = { x, y, t: Date.now() }
+      }
+      const onUp = (x: number, y: number) => {
+        if (isTap(x, y)) tryPick(x, y)
+        down = null
+      }
+
+      const onPointerDown = (e: PointerEvent) => onDown(e.clientX, e.clientY)
+      const onPointerUp = (e: PointerEvent) => onUp(e.clientX, e.clientY)
+      const onTouchStart = (e: TouchEvent) => {
+        const t = e.changedTouches[0]
+        if (t) onDown(t.clientX, t.clientY)
+      }
+      const onTouchEnd = (e: TouchEvent) => {
+        const t = e.changedTouches[0]
+        if (t) onUp(t.clientX, t.clientY)
+      }
+
+      window.addEventListener('pointerdown', onPointerDown, { capture: true })
+      window.addEventListener('pointerup', onPointerUp, { capture: true })
+      window.addEventListener('touchstart', onTouchStart, { capture: true, passive: true })
+      window.addEventListener('touchend', onTouchEnd, { capture: true, passive: true })
       map.on('click', (e) => {
-        // Safari touchend already handled the tap — skip the synthesized click
-        if (Date.now() - lastTouchPickAt < 700) return
+        // pointer/touch listeners above already handled this gesture
+        if (Date.now() - lastPickAt < 500) return
         pickAt(e.point)
       })
 
-      // Some iOS Safari versions never fire the synthesized tap->click, so
-      // pick directly from touchend (taps only — not pans/pinches).
-      let touchStart: { x: number; y: number; t: number } | null = null
-      const onTouchStart = (ev: TouchEvent) => {
-        const t = ev.changedTouches[0]
-        touchStart = t ? { x: t.clientX, y: t.clientY, t: Date.now() } : null
-      }
-      const onTouchEnd = (ev: TouchEvent) => {
-        const start = touchStart
-        const t = ev.changedTouches[0]
-        if (!start || !t) return
-        const moved = Math.hypot(t.clientX - start.x, t.clientY - start.y)
-        if (moved > 12 || Date.now() - start.t > 600) return
-        lastTouchPickAt = Date.now()
-        pickAt({ x: t.clientX, y: t.clientY })
-      }
-      const el = containerRef.current
-      if (!el) return
-      el.addEventListener('touchstart', onTouchStart, { passive: true })
-      el.addEventListener('touchend', onTouchEnd, { passive: true })
       cleanupTouch = () => {
-        el.removeEventListener('touchstart', onTouchStart)
-        el.removeEventListener('touchend', onTouchEnd)
+        window.removeEventListener('pointerdown', onPointerDown, { capture: true } as EventListenerOptions)
+        window.removeEventListener('pointerup', onPointerUp, { capture: true } as EventListenerOptions)
+        window.removeEventListener('touchstart', onTouchStart, { capture: true } as EventListenerOptions)
+        window.removeEventListener('touchend', onTouchEnd, { capture: true } as EventListenerOptions)
       }
     }
 
