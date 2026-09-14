@@ -16,6 +16,7 @@ interface GlobeMapProps {
   wrongIds: string[]
   solvedGroup: string | null
   fitBounds: [[number, number], [number, number]] | null
+  labelClasses: string[] | 'all'
   completed: boolean
   onPick: (candidateId: string, groupName: string | undefined, name: string) => void
 }
@@ -25,6 +26,7 @@ export function GlobeMap({
   wrongIds,
   solvedGroup,
   fitBounds,
+  labelClasses,
   completed,
   onPick,
 }: GlobeMapProps) {
@@ -32,6 +34,7 @@ export function GlobeMap({
   const mapRef = useRef<MapLibreGL.Map | null>(null)
   const maplibreRef = useRef<typeof MapLibreGL | null>(null)
   const [mapReady, setMapReady] = useState(false)
+  const placeLayersRef = useRef<{ id: string; filter: MapLibreGL.FilterSpecification | null }[] | null>(null)
   const pickRef = useRef(onPick)
   pickRef.current = onPick
 
@@ -155,6 +158,42 @@ export function GlobeMap({
       map.once('idle', apply)
     }
   }, [candidates, wrongIds, solvedGroup])
+
+  // Show only place labels relevant to the current level
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+
+    const applyLabels = () => {
+      if (!placeLayersRef.current) {
+        placeLayersRef.current = map
+          .getStyle()
+          .layers.filter(
+            (l): l is MapLibreGL.LayerSpecification & { 'source-layer': string } =>
+              l.type === 'symbol' && 'source-layer' in l && l['source-layer'] === 'place',
+          )
+          .map((l) => {
+            const f = map.getFilter(l.id)
+            return {
+              id: l.id,
+              filter: typeof f === 'boolean' ? null : (f as MapLibreGL.FilterSpecification | null),
+            }
+          })
+      }
+      const classes =
+        labelClasses === 'all'
+          ? ['continent', 'country', 'state', 'city', 'town', 'village', 'suburb', 'neighbourhood']
+          : labelClasses
+      for (const { id, filter } of placeLayersRef.current) {
+        const relevance = ['match', ['get', 'class'], classes, true, false]
+        const combined = filter ? ['all', filter, relevance] : relevance
+        map.setFilter(id, combined as MapLibreGL.FilterSpecification)
+      }
+    }
+
+    if (map.isStyleLoaded()) applyLabels()
+    else map.once('idle', applyLabels)
+  }, [labelClasses, mapReady])
 
   // Camera framing
   useEffect(() => {

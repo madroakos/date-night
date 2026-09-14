@@ -21,6 +21,8 @@ const HUN_ADM1 =
   'https://media.githubusercontent.com/media/wmgeolab/geoBoundaries/9469f09/releaseData/gbOpen/HUN/ADM1/geoBoundaries-HUN-ADM1_simplified.geojson'
 const HUN_ADM2 =
   'https://media.githubusercontent.com/media/wmgeolab/geoBoundaries/9469f09/releaseData/gbOpen/HUN/ADM2/geoBoundaries-HUN-ADM2_simplified.geojson'
+const NE_COUNTRIES =
+  'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson'
 
 const BUDAPEST_DISTRICTS = new Set(
   'I II III IV V VI VII VIII IX X XI XII XIII XIV XV XVI XVII XVIII XIX XX XXI XXII XXIII'
@@ -111,8 +113,30 @@ export async function loadCountries(): Promise<Candidate[]> {
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export async function loadCounties(): Promise<Candidate[]> {
-  const features = await fetchFeatures(HUN_ADM1)
+/** Continent-level candidates: every country polygon tagged with its Natural Earth continent. */
+export async function loadContinentCandidates(): Promise<Candidate[]> {
+  const features = await fetchFeatures(NE_COUNTRIES)
+  return features
+    .map((f, i) => {
+      const continent = String(f.properties.CONTINENT ?? f.properties.continent ?? '')
+      return candidate(f, `continent-${i}`, continent, 'continent', continent)
+    })
+    .filter((c) => c.groupName && c.groupName !== 'Seven seas (open ocean)')
+}
+
+/** Europe bbox for framing the country step (Russia excluded — it stretches to the Pacific). */
+export async function loadEuropeBbox(): Promise<[number, number, number, number]> {
+  const features = await fetchFeatures(NE_COUNTRIES)
+  const bboxes = features
+    .filter((f) => {
+      const props = f.properties as Record<string, unknown>
+      return (props.CONTINENT ?? props.continent) === 'Europe' && props.NAME !== 'Russia'
+    })
+    .map((f) => featureBbox(f.geometry))
+  return bboxes.length ? unionBbox(bboxes) : ([-10, 35, 40, 70] as [number, number, number, number])
+}
+
+export async function loadCounties(): Promise<Candidate[]> {  const features = await fetchFeatures(HUN_ADM1)
   return features.map((f, i) =>
     candidate(f, `state-${i}`, String(f.properties.shapeName ?? `County ${i}`), 'state'),
   )

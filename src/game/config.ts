@@ -1,4 +1,4 @@
-export type LevelId = 'country' | 'state' | 'city' | 'district'
+export type LevelId = 'continent' | 'country' | 'state' | 'city' | 'district'
 
 export interface LevelConfig {
   id: LevelId
@@ -9,6 +9,13 @@ export interface LevelConfig {
 }
 
 export const LEVELS: LevelConfig[] = [
+  {
+    id: 'continent',
+    label: 'Földrész',
+    prompt: 'Melyik földrészen kezdődik a nyomozás?',
+    unlockDate: '2026-09-09',
+    targetName: 'Europe',
+  },
   {
     id: 'country',
     label: 'Ország',

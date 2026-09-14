@@ -8,9 +8,11 @@ import {
 import {
   loadBudapestBbox,
   loadCityCandidates,
+  loadContinentCandidates,
   loadCounties,
   loadCountries,
   loadDistrictCandidates,
+  loadEuropeBbox,
   type Candidate,
 } from '../game/data'
 import { useJourney } from '../game/useJourney'
@@ -40,8 +42,12 @@ function Home() {
         }
         setCandidates(null)
 
-        if (levelId === 'country') {
+        if (levelId === 'continent') {
           setFitBounds(WORLD_BOUNDS)
+          const list = await loadContinentCandidates()
+          if (!cancelled) setCandidates(list)
+        } else if (levelId === 'country') {
+          setFitBounds(bboxToBounds(await loadEuropeBbox()))
           const list = await loadCountries()
           if (!cancelled) setCandidates(list)
         } else if (levelId === 'state') {
@@ -85,10 +91,26 @@ function Home() {
   const solvedGroup =
     levelId === 'city' && state.solved.city ? 'Budapest' : null
 
+  const labelClasses: string[] | 'all' =
+    state.completed
+      ? 'all'
+      : levelId === 'continent'
+        ? ['continent']
+        : levelId === 'country'
+          ? ['country']
+          : levelId === 'state'
+            ? ['state']
+            : levelId === 'city'
+              ? ['city', 'town']
+              : ['suburb', 'neighbourhood', 'city', 'town']
+
   function handlePick(candidateId: string, groupName: string | undefined, name: string) {
     if (!currentLevel || !currentUnlocked) return
     let correct: boolean
     switch (currentLevel.id) {
+      case 'continent':
+        correct = groupName === 'Europe'
+        break
       case 'country':
         correct = name === 'Hungary'
         break
@@ -112,6 +134,7 @@ function Home() {
         wrongIds={wrongIds}
         solvedGroup={solvedGroup}
         fitBounds={fitBounds}
+        labelClasses={labelClasses}
         completed={state.completed}
         onPick={handlePick}
       />
