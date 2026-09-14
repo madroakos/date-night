@@ -13,8 +13,8 @@ const WORLD_BOUNDS: [[number, number], [number, number]] = [
 
 interface GlobeMapProps {
   candidates: Candidate[] | null
-  wrongIds: string[]
-  solvedGroup: string | null
+  wrongGroups: string[]
+  solvedGroups: string[]
   fitBounds: [[number, number], [number, number]] | null
   labelClasses: string[] | 'all'
   completed: boolean
@@ -23,8 +23,8 @@ interface GlobeMapProps {
 
 export function GlobeMap({
   candidates,
-  wrongIds,
-  solvedGroup,
+  wrongGroups,
+  solvedGroups,
   fitBounds,
   labelClasses,
   completed,
@@ -120,7 +120,7 @@ export function GlobeMap({
     }
   }, [])
 
-  // Candidate polygons
+  // Candidate polygons — data only; coloring is handled by the paint effect below
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -154,14 +154,6 @@ export function GlobeMap({
           },
         })
       }
-      map.setPaintProperty('candidates-fill', 'fill-color', [
-        'case',
-        ['in', ['get', 'candidateId'], ['literal', wrongIds]],
-        '#ef4444',
-        ['all', ['==', ['get', 'groupName'], solvedGroup ?? '\u0000'], ['!=', solvedGroup ?? '\u0000', '']],
-        '#22c55e',
-        'rgba(255,255,255,0.10)',
-      ])
     }
 
     if (map.isStyleLoaded()) {
@@ -170,7 +162,28 @@ export function GlobeMap({
       // 'idle' re-fires after every render settle, unlike 'load' which only fires once
       map.once('idle', apply)
     }
-  }, [candidates, wrongIds, solvedGroup])
+  }, [candidates])
+
+  // Red/green paint — cheap paint-property update, no data re-serialization
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+
+    const applyPaint = () => {
+      if (!map.getLayer('candidates-fill')) return
+      map.setPaintProperty('candidates-fill', 'fill-color', [
+        'case',
+        ['in', ['get', 'groupName'], ['literal', wrongGroups]],
+        '#ef4444',
+        ['in', ['get', 'groupName'], ['literal', solvedGroups]],
+        '#22c55e',
+        'rgba(255,255,255,0.10)',
+      ])
+    }
+
+    if (map.isStyleLoaded()) applyPaint()
+    else map.once('idle', applyPaint)
+  }, [wrongGroups, solvedGroups, mapReady])
 
   // Show only place labels relevant to the current level
   useEffect(() => {

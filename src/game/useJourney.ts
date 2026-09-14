@@ -23,7 +23,7 @@ const initialState: JourneyState = {
 }
 
 type Action =
-  | { type: 'pick'; correct: boolean; id: string }
+  | { type: 'pick'; correct: boolean; group: string }
   | { type: 'reset' }
 
 function reducer(state: JourneyState, action: Action): JourneyState {
@@ -42,14 +42,13 @@ function reducer(state: JourneyState, action: Action): JourneyState {
           levelIndex: completed ? state.levelIndex : nextIndex,
           solved,
           completed,
-          wrongGuesses: { ...state.wrongGuesses, [level.id]: [] },
         }
       }
       const wrong = state.wrongGuesses[level.id]
-      if (wrong.includes(action.id)) return state
+      if (wrong.includes(action.group)) return state
       return {
         ...state,
-        wrongGuesses: { ...state.wrongGuesses, [level.id]: [...wrong, action.id] },
+        wrongGuesses: { ...state.wrongGuesses, [level.id]: [...wrong, action.group] },
         wrongPulse: state.wrongPulse + 1,
       }
     }
@@ -107,7 +106,7 @@ export function useJourney() {
 
   const nextUnlockDate = LEVELS.slice(state.levelIndex).find((l) => !isUnlocked(l))?.unlockDate
 
-  const pick = useCallback((correct: boolean, id: string) => dispatch({ type: 'pick', correct, id }), [])
+  const pick = useCallback((correct: boolean, group: string) => dispatch({ type: 'pick', correct, group }), [])
   const reset = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY)
     dispatch({ type: 'reset' })

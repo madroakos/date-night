@@ -29,6 +29,14 @@ function Home() {
 
   const levelId: LevelId | null = state.completed ? null : (currentLevel?.id ?? null)
 
+  // Warm the data cache early so later steps render instantly
+  useEffect(() => {
+    loadContinentCandidates().catch(() => {})
+    loadCounties().catch(() => {})
+    loadCityCandidates().catch(() => {})
+    loadDistrictCandidates().catch(() => {})
+  }, [])
+
   // Load candidates + frame the parent area for the current level
   useEffect(() => {
     let cancelled = false
@@ -83,13 +91,14 @@ function Home() {
     }
   }, [levelId, currentUnlocked, state.completed])
 
-  const wrongIds = useMemo(
-    () => (levelId ? (state.wrongGuesses[levelId] ?? []) : []),
-    [levelId, state.wrongGuesses],
+  const wrongGroups = useMemo(
+    () => [...new Set(LEVELS.flatMap((l) => state.wrongGuesses[l.id]))],
+    [state.wrongGuesses],
   )
-
-  const solvedGroup =
-    levelId === 'city' && state.solved.city ? 'Budapest' : null
+  const solvedGroups = useMemo(
+    () => LEVELS.filter((l) => state.solved[l.id]).map((l) => l.targetName),
+    [state.solved],
+  )
 
   const labelClasses: string[] | 'all' =
     state.completed
@@ -104,7 +113,7 @@ function Home() {
               ? ['city', 'town']
               : ['suburb', 'neighbourhood', 'city', 'town']
 
-  function handlePick(candidateId: string, groupName: string | undefined, name: string) {
+  function handlePick(_candidateId: string, groupName: string | undefined, name: string) {
     if (!currentLevel || !currentUnlocked) return
     let correct: boolean
     switch (currentLevel.id) {
@@ -124,15 +133,15 @@ function Home() {
         correct = name === 'V. kerület'
         break
     }
-    pick(correct, candidateId)
+    pick(correct, groupName ?? name)
   }
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-[#05070d] text-white">
       <GlobeMap
         candidates={candidates}
-        wrongIds={wrongIds}
-        solvedGroup={solvedGroup}
+        wrongGroups={wrongGroups}
+        solvedGroups={solvedGroups}
         fitBounds={fitBounds}
         labelClasses={labelClasses}
         completed={state.completed}
@@ -168,6 +177,9 @@ function Home() {
               )
             })}
           </ol>
+          {!state.completed && currentLevel && currentUnlocked && candidates === null && !error && (
+            <p className="mt-1 text-[11px] text-amber-300/80">Térkép betöltése…</p>
+          )}
           {!state.completed && currentLevel && (
             <p className="mt-2 text-[11px] text-white/70 sm:text-xs">
               {currentUnlocked ? (
@@ -175,9 +187,9 @@ function Home() {
               ) : (
                 <>Zárolva eddig: {nextUnlockDate ?? currentLevel.unlockDate}</>
               )}
-              {currentUnlocked && wrongIds.length > 0 && (
+              {currentUnlocked && wrongGroups.length > 0 && (
                 <span className="ml-2 text-red-400">
-                  {wrongIds.length} rossz tipp
+                  {wrongGroups.length} rossz tipp
                 </span>
               )}
             </p>

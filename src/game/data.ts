@@ -15,8 +15,6 @@ type RawFeature = {
   geometry: Geometry
 }
 
-const WORLD_GEOJSON =
-  'https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json'
 const HUN_ADM1 =
   'https://media.githubusercontent.com/media/wmgeolab/geoBoundaries/9469f09/releaseData/gbOpen/HUN/ADM1/geoBoundaries-HUN-ADM1_simplified.geojson'
 const HUN_ADM2 =
@@ -98,18 +96,21 @@ function candidate(
     id,
     name,
     level,
-    groupName,
+    groupName: groupName ?? name,
     geometry: f.geometry,
     bbox: featureBbox(f.geometry),
   }
 }
 
 export async function loadCountries(): Promise<Candidate[]> {
-  const features = await fetchFeatures(WORLD_GEOJSON)
+  const features = await fetchFeatures(NE_COUNTRIES)
   return features
-    .map((f, i) =>
-      candidate(f, `country-${i}`, String(f.properties.name ?? `Country ${i}`), 'country'),
-    )
+    .map((f, i) => {
+      const name = String(f.properties.NAME ?? f.properties.name ?? `Country ${i}`)
+      const continent = String(f.properties.CONTINENT ?? f.properties.continent ?? '')
+      return candidate(f, `country-${i}`, name, 'country', continent)
+    })
+    .filter((c) => c.groupName !== 'Seven seas (open ocean)')
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
@@ -139,9 +140,10 @@ export async function loadEuropeBbox(): Promise<[number, number, number, number]
 }
 
 export async function loadCounties(): Promise<Candidate[]> {  const features = await fetchFeatures(HUN_ADM1)
-  return features.map((f, i) =>
-    candidate(f, `state-${i}`, String(f.properties.shapeName ?? `County ${i}`), 'state'),
-  )
+  return features.map((f, i) => {
+    const name = String(f.properties.shapeName ?? `County ${i}`)
+    return candidate(f, `state-${i}`, name, 'state', name)
+  })
 }
 
 async function loadAdm2(): Promise<RawFeature[]> {
@@ -174,7 +176,7 @@ export async function loadDistrictCandidates(): Promise<Candidate[]> {
     .map((f, i) => ({ f, i, name: String(f.properties.shapeName ?? '') }))
     .filter(({ name }) => BUDAPEST_DISTRICTS.has(name))
     .sort((a, b) => a.name.localeCompare(b.name, 'hu'))
-    .map(({ f, i, name }) => candidate(f, `district-${i}`, name, 'district'))
+    .map(({ f, i, name }) => candidate(f, `district-${i}`, name, 'district', name))
 }
 
 export async function loadBudapestBbox(): Promise<[number, number, number, number]> {
