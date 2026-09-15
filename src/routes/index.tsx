@@ -38,9 +38,8 @@ function Home() {
   }, [])
 
   // Load candidates + frame the parent area for the current level.
-  // Levels grouped over the SAME dataset (Földrész/Ország → world,
-  // Város/Kerület → Budapest) share one memoized array, so those
-  // transitions swap zero map data.
+  // Some adjacent levels share a memoized dataset, but every transition must
+  // still calculate the narrower camera bounds for the new level.
   const activeDataGroupRef = useRef<string | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -63,12 +62,9 @@ function Home() {
           return
         }
 
-        if (dataGroup && dataGroup === activeDataGroupRef.current) {
-          // same dataset already on the map — nothing to swap
-          return
-        }
+        const isNewDataGroup = dataGroup !== activeDataGroupRef.current
         activeDataGroupRef.current = dataGroup
-        setCandidates(null)
+        if (isNewDataGroup) setCandidates(null)
 
         if (levelId === 'continent') {
           setFitBounds(WORLD_BOUNDS)
@@ -108,12 +104,12 @@ function Home() {
   }, [levelId, currentUnlocked, state.completed])
 
   const wrongGroups = useMemo(
-    () => [...new Set(LEVELS.flatMap((l) => state.wrongGuesses[l.id]))],
-    [state.wrongGuesses],
+    () => (levelId ? state.wrongGuesses[levelId] : []),
+    [levelId, state.wrongGuesses],
   )
   const solvedGroups = useMemo(
-    () => LEVELS.filter((l) => state.solved[l.id]).map((l) => l.targetName),
-    [state.solved],
+    () => (levelId && state.solved[levelId] ? [currentLevel.targetName] : []),
+    [currentLevel, levelId, state.solved],
   )
 
   const labelClasses: string[] | 'all' =
@@ -132,24 +128,30 @@ function Home() {
   function handlePick(_candidateId: string, groupName: string | undefined, name: string) {
     if (!currentLevel || !currentUnlocked) return
     let correct: boolean
+    let selectionGroup: string
     switch (currentLevel.id) {
       case 'continent':
         correct = groupName === 'Europe'
+        selectionGroup = groupName ?? name
         break
       case 'country':
         correct = name === 'Hungary'
+        selectionGroup = name
         break
       case 'state':
         correct = name === 'Pest'
+        selectionGroup = name
         break
       case 'city':
         correct = groupName === 'Budapest'
+        selectionGroup = groupName ?? name
         break
       case 'district':
         correct = name === 'V. kerület'
+        selectionGroup = name
         break
     }
-    pick(correct, groupName ?? name)
+    pick(correct, selectionGroup)
   }
 
   return (
@@ -160,6 +162,17 @@ function Home() {
         wrongGroups={wrongGroups}
         solvedGroups={solvedGroups}
         fitBounds={fitBounds}
+        minCameraZoom={
+          levelId === 'country'
+            ? 2.6
+            : levelId === 'state'
+              ? 5.2
+              : levelId === 'city'
+                ? 7.2
+                : levelId === 'district'
+                  ? 10
+                  : 1.05
+        }
         labelClasses={labelClasses}
         completed={state.completed}
         onPick={handlePick}

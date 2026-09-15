@@ -133,11 +133,10 @@ export function loadCountries(): Promise<Candidate[]> {
 
 /** Europe bbox for framing the country step (Russia excluded — it stretches to the Pacific). */
 export async function loadEuropeBbox(): Promise<[number, number, number, number]> {
-  const world = await loadWorldCandidates()
-  const bboxes = world
-    .filter((c) => c.groupName === 'Europe' && c.name !== 'Russia')
-    .map((c) => c.bbox)
-  return bboxes.length ? unionBbox(bboxes) : ([-10, 35, 40, 70] as [number, number, number, number])
+  await loadWorldCandidates()
+  // Use mainland bounds: raw country geometries include overseas territories
+  // such as French Guiana, which otherwise keep the camera near world zoom.
+  return [-12, 34, 35, 72]
 }
 
 export async function loadCounties(): Promise<Candidate[]> {

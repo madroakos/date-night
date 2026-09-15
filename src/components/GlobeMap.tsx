@@ -17,6 +17,7 @@ interface GlobeMapProps {
   wrongGroups: string[]
   solvedGroups: string[]
   fitBounds: [[number, number], [number, number]] | null
+  minCameraZoom: number
   labelClasses: string[] | 'all'
   completed: boolean
   onPick: (candidateId: string, groupName: string | undefined, name: string) => void
@@ -28,6 +29,7 @@ export function GlobeMap({
   wrongGroups,
   solvedGroups,
   fitBounds,
+  minCameraZoom,
   labelClasses,
   completed,
   onPick,
@@ -288,9 +290,17 @@ export function GlobeMap({
       if (!map.getLayer('candidates-fill')) return
       map.setPaintProperty('candidates-fill', 'fill-color', [
         'case',
-        ['in', ['get', 'groupName'], ['literal', wrongGroups]],
+        [
+          'any',
+          ['in', ['get', 'groupName'], ['literal', wrongGroups]],
+          ['in', ['get', 'name'], ['literal', wrongGroups]],
+        ],
         '#ef4444',
-        ['in', ['get', 'groupName'], ['literal', solvedGroups]],
+        [
+          'any',
+          ['in', ['get', 'groupName'], ['literal', solvedGroups]],
+          ['in', ['get', 'name'], ['literal', solvedGroups]],
+        ],
         '#22c55e',
         'rgba(255,255,255,0.10)',
       ])
@@ -337,9 +347,33 @@ export function GlobeMap({
   // Camera framing
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !mapReady || !fitBounds) return
-    map.fitBounds(fitBounds, { padding: 60, duration: 1600, maxZoom: 12 })
-  }, [fitBounds, mapReady])
+    // Completion has its own destination flight below. Scheduling the normal
+    // level camera here would fire later and cancel that final animation.
+    if (!map || !mapReady || !fitBounds || completed) return
+
+    // Let the successful pointer/touch gesture and any immediately-following
+    // bounds update finish first. Otherwise MapLibre's trailing gesture event
+    // cancels the flight almost as soon as it starts.
+    const timer = window.setTimeout(() => {
+      if (mapRef.current !== map) return
+      const camera = map.cameraForBounds(fitBounds, { padding: 60, maxZoom: 12 })
+      if (!camera) return
+
+      map.stop()
+      map.flyTo({
+        center: camera.center,
+        // Each game step has a deliberate destination zoom. Using the fitted
+        // zoom here made transitions barely visible on tall phone viewports.
+        zoom: minCameraZoom,
+        bearing: 0,
+        pitch: 0,
+        duration: 2200,
+        essential: true,
+      })
+    }, 120)
+
+    return () => window.clearTimeout(timer)
+  }, [completed, fitBounds, mapReady, minCameraZoom])
 
   // Final fly-to + marker
   useEffect(() => {
