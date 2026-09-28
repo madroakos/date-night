@@ -149,9 +149,8 @@ export async function loadCounties(): Promise<Candidate[]> {
   })
 }
 
-/** One Budapest dataset shared by the Város and Kerület steps (same array
- *  reference for both): the 23 kerület grouped under 'Budapest' plus a few
- *  Pest-county distractor towns. */
+/** One dataset shared by Város and Kerület steps: Budapest's 23 districts
+ * plus all 55 Pest county cities with their municipality boundaries. */
 export function loadCityCandidates(): Promise<Candidate[]> {
   return built('budapest', async () => {
     const features = await fetchFeatures(BUDAPEST)

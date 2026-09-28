@@ -283,6 +283,53 @@ export function GlobeMap({
             },
           })
         }
+
+        const cityAreas = dataKey === 'city'
+          ? (candidates ?? []).filter((candidate) => candidate.groupName !== 'Budapest')
+          : []
+        const districts = dataKey === 'city'
+          ? (candidates ?? []).filter((candidate) => candidate.groupName === 'Budapest')
+          : []
+        const labelAreas = cityAreas.map((candidate) => ({
+          name: candidate.name,
+          bbox: candidate.bbox,
+        }))
+        if (districts.length > 0) {
+          labelAreas.push({ name: 'Budapest', bbox: unionBbox(districts.map((district) => district.bbox)) })
+        }
+        const labelCollection: FeatureCollection = {
+          type: 'FeatureCollection',
+          features: labelAreas.map(({ name, bbox }) => ({
+            type: 'Feature',
+            properties: { name },
+            geometry: {
+              type: 'Point',
+              coordinates: [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2],
+            },
+          })),
+        }
+        const labelSource = map.getSource('candidate-city-labels') as MapLibreGL.GeoJSONSource | undefined
+        if (labelSource) {
+          labelSource.setData(labelCollection)
+        } else {
+          map.addSource('candidate-city-labels', { type: 'geojson', data: labelCollection })
+          map.addLayer({
+            id: 'candidate-city-labels',
+            type: 'symbol',
+            source: 'candidate-city-labels',
+            layout: {
+              'text-field': ['get', 'name'],
+              'text-size': 12,
+              'text-variable-anchor': ['top', 'bottom', 'left', 'right'],
+              'text-radial-offset': 0.5,
+            },
+            paint: {
+              'text-color': '#ffffff',
+              'text-halo-color': '#101522',
+              'text-halo-width': 2,
+            },
+          })
+        }
       }
       appliedDataRef.current = { key: dataKey, data: candidates }
       dataReadyRef.current = { key: dataKey, ready: true }

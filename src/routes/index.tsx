@@ -36,6 +36,8 @@ function Home() {
   } = useJourney()
   const [candidates, setCandidates] = useState<Candidate[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [cityPickerOpen, setCityPickerOpen] = useState(false)
+  const [citySearch, setCitySearch] = useState('')
   const [fitBounds, setFitBounds] = useState<Bounds | null>(WORLD_BOUNDS)
   const [invitationOpen, setInvitationOpen] = useState(false)
   const reopenInvitationRef = useRef<HTMLButtonElement>(null)
@@ -122,6 +124,18 @@ function Home() {
   const solvedGroups = useMemo(
     () => (levelId && state.solved[levelId] ? [currentLevel.targetName] : []),
     [currentLevel, levelId, state.solved],
+  )
+
+  const cityOptions = useMemo(() => {
+    if (levelId !== 'city' || !candidates) return []
+    const byName = new Map<string, Candidate>()
+    for (const candidate of candidates) {
+      byName.set(candidate.groupName ?? candidate.name, candidate)
+    }
+    return [...byName].sort(([a], [b]) => a.localeCompare(b, 'hu'))
+  }, [candidates, levelId])
+  const visibleCityOptions = cityOptions.filter(([name]) =>
+    name.toLocaleLowerCase('hu').includes(citySearch.toLocaleLowerCase('hu').trim()),
   )
 
   const labelClasses: string[] | 'all' = state.completed
@@ -274,6 +288,57 @@ function Home() {
           )}
         </div>
       </header>
+
+      {levelId === 'city' && currentUnlocked && cityOptions.length > 0 && (
+        <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+3.5rem)] right-3 z-20 w-[min(19rem,calc(100vw-1.5rem))]">
+          {cityPickerOpen ? (
+            <div className="rounded-2xl border border-white/20 bg-[#101522]/95 p-3 shadow-2xl backdrop-blur-xl">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold">Városok ({cityOptions.length})</h2>
+                <button
+                  type="button"
+                  onClick={() => setCityPickerOpen(false)}
+                  aria-label="Városlista bezárása"
+                  className="rounded-md px-2 py-1 text-white/70 hover:bg-white/10 hover:text-white"
+                >
+                  Bezárás
+                </button>
+              </div>
+              <input
+                type="search"
+                value={citySearch}
+                onChange={(event) => setCitySearch(event.target.value)}
+                placeholder="Város keresése…"
+                aria-label="Város keresése"
+                className="mb-2 w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-rose-300"
+              />
+              <div className="max-h-[min(55vh,25rem)] overflow-y-auto overscroll-contain">
+                {visibleCityOptions.map(([name, candidate]) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => handlePick(candidate.id, candidate.groupName, candidate.name)}
+                    className={`block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-rose-300 ${wrongGroups.includes(name) ? 'text-red-300' : 'text-white'}`}
+                  >
+                    {name}
+                  </button>
+                ))}
+                {visibleCityOptions.length === 0 && (
+                  <p className="px-3 py-2 text-sm text-white/60">Nincs találat.</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setCityPickerOpen(true)}
+              className="ml-auto block rounded-xl border border-white/25 bg-[#101522]/90 px-4 py-2 text-sm font-semibold shadow-lg backdrop-blur hover:bg-[#202a40] focus:outline-none focus:ring-2 focus:ring-rose-300"
+            >
+              Városok ({cityOptions.length})
+            </button>
+          )}
+        </div>
+      )}
 
       {state.completed && !invitationOpen && (
         <button
