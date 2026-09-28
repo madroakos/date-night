@@ -102,7 +102,7 @@ export const LEVEL_GAP_MS = 2 * 60 * 60 * 1000;
  * layer is available immediately and no cooldown UI (countdown, centered
  * header, darkened globe) appears.
  */
-export const LAYER_COOLDOWN_ENABLED = false;
+export const LAYER_COOLDOWN_ENABLED = true;
 
 /**
  * Unlock timestamp for a level index, or null when the layer is available

@@ -17,9 +17,9 @@ type RawFeature = {
 
 // Vendored GeoJSON served from /public/data — same host as the app, so no
 // external connectivity is required (phones on the LAN included).
-const WORLD = '/data/world.json'
-const COUNTIES = '/data/counties.json'
-const BUDAPEST = '/data/budapest.json'
+const WORLD = `${import.meta.env.BASE_URL}data/world.json`
+const COUNTIES = `${import.meta.env.BASE_URL}data/counties.json`
+const BUDAPEST = `${import.meta.env.BASE_URL}data/budapest.json`
 
 const cache = new Map<string, Promise<RawFeature[]>>()
 const builtCache = new Map<string, Promise<Candidate[]>>()
