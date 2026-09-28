@@ -3,7 +3,7 @@ import type { FeatureCollection } from 'geojson'
 import type * as MapLibreGL from 'maplibre-gl'
 import type { Candidate } from '../game/data'
 import { unionBbox } from '../game/data'
-import { DESTINATION, FINAL_ZOOM } from '../game/config'
+import type { DestinationConfig } from '../game/config'
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/dark'
 const WORLD_BOUNDS: [[number, number], [number, number]] = [
@@ -20,7 +20,13 @@ interface GlobeMapProps {
   minCameraZoom: number
   labelClasses: string[] | 'all'
   completed: boolean
+  destination: DestinationConfig
+  onFinalFlightEnd: () => void
   onPick: (candidateId: string, groupName: string | undefined, name: string) => void
+}
+
+export function isPhoneViewport(): boolean {
+  return typeof window !== 'undefined' && window.innerWidth < 640
 }
 
 export function GlobeMap({
@@ -32,6 +38,8 @@ export function GlobeMap({
   minCameraZoom,
   labelClasses,
   completed,
+  destination,
+  onFinalFlightEnd,
   onPick,
 }: GlobeMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -47,6 +55,8 @@ export function GlobeMap({
   const placeLayersRef = useRef<{ id: string; filter: MapLibreGL.FilterSpecification | null }[] | null>(null)
   const pickRef = useRef(onPick)
   pickRef.current = onPick
+  const finalFlightEndRef = useRef(onFinalFlightEnd)
+  finalFlightEndRef.current = onFinalFlightEnd
   const candidatesRef = useRef(candidates)
   candidatesRef.current = candidates
   const appliedDataRef = useRef<{ key: string; data: Candidate[] | null } | null>(null)
@@ -87,7 +97,7 @@ export function GlobeMap({
         container: containerRef.current,
         style: MAP_STYLE,
         center: [8, 12],
-        zoom: 1.05,
+        zoom: isPhoneViewport() ? 1.05 : 1.4,
         minZoom: 0.5,
         maxPitch: 0,
         dragRotate: false,
@@ -382,21 +392,47 @@ export function GlobeMap({
     const maplibregl = maplibreRef.current!
     if (!map || !maplibregl) return
 
-    map.flyTo({ center: DESTINATION.coords, zoom: FINAL_ZOOM, duration: 4000 })
+    const finalZoom = destination.mapZoom ?? 17
+    const handleMoveEnd = () => {
+      const center = map.getCenter()
+      const [longitude, latitude] = destination.coordinates
+      const arrived =
+        Math.abs(center.lng - longitude) < 0.001 &&
+        Math.abs(center.lat - latitude) < 0.001 &&
+        Math.abs(map.getZoom() - finalZoom) < 0.1
+      if (!arrived) return
+      map.off('moveend', handleMoveEnd)
+      finalFlightEndRef.current()
+    }
+    // Start after the gesture that solved the last level has fully finished;
+    // otherwise its trailing event can consume/cancel the flight's moveend.
+    const flightTimer = window.setTimeout(() => {
+      // Keep listening until the destination is actually reached; an initial
+      // style/load moveend may fire before the flight's own moveend.
+      map.on('moveend', handleMoveEnd)
+      map.flyTo({
+        center: destination.coordinates,
+        zoom: finalZoom,
+        duration: 4000,
+        essential: true,
+      })
+    }, 120)
     const marker = new maplibregl.Marker({ color: '#f472b6' })
-      .setLngLat(DESTINATION.coords)
+      .setLngLat(destination.coordinates)
       .setPopup(
         new maplibregl.Popup({ offset: 24 }).setHTML(
-          `<strong>${DESTINATION.name}</strong><br/>Ott találkozunk 💛`,
+          `<strong>${escapeHtml(destination.shortName ?? destination.name)}</strong><br/>${escapeHtml(destination.markerMessage ?? 'Ott találkozunk 💛')}`,
         ),
       )
       .addTo(map)
     marker.togglePopup()
 
     return () => {
+      window.clearTimeout(flightTimer)
+      map.off('moveend', handleMoveEnd)
       marker.remove()
     }
-  }, [completed, mapReady])
+  }, [completed, destination, mapReady])
 
   return (
     <>
@@ -420,3 +456,14 @@ export function GlobeMap({
 }
 
 export { WORLD_BOUNDS, unionBbox }
+
+function escapeHtml(value: string): string {
+  const entities: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;',
+  }
+  return value.replace(/[&<>'"]/g, (character) => entities[character])
+}

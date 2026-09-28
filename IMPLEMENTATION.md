@@ -2,8 +2,8 @@
 
 ## Goal
 A step-by-step treasure hunt where the user narrows down a location across 4 levels,
-each locked behind a date. Final destination (for testing): **Hungarian Parliament Building**
-(`[19.0457, 47.5070]`, in Budapest, District V — "V. kerület").
+each locked behind a date. Final destination: **Tereza étterem**
+(`[19.061686, 47.5026769]`, 1065 Budapest, Nagymező utca 3., District VI — "VI. kerület").
 
 Chain: **Country → State/County → City → District**
 
@@ -21,7 +21,7 @@ interface LevelConfig {
   id: LevelId
   label: string            // "Select the country"
   unlockDate: string       // ISO date; for testing all <= today
-  targetName: string       // 'Hungary' | 'Pest' | 'Budapest' | 'V. kerület'
+  targetName: string       // 'Hungary' | 'Pest' | 'Budapest' | 'VI. kerület'
 }
 ```
 - 4 hardcoded levels, unlock dates `2026-09-10 … 2026-09-13` (all past → unlocked for testing).
@@ -57,8 +57,8 @@ Per step:
 ## HUD (src/routes/index.tsx)
 - Top card: journey title, step list (Country ✓ / County / City 🔒 2026-09-12 / District 🔒 …),
   current prompt ("Which county is it in?"), wrong-guess count for current level.
-- After final correct pick: green success card + map flies to `zoom 17` on Parliament coords
-  with a marker + popup ("Hungarian Parliament 🏛 — see you there 💛").
+- After final correct pick: the map flies to `zoom 18` on Tereza's coordinates
+  with a marker and a configurable invitation card.
 
 ## Files
 - `src/game/config.ts` — levels, dates, target, coords
@@ -70,4 +70,4 @@ Per step:
 ## Verification
 - `npm run build` passes (tsc via vite).
 - Dev server + browser: click-through country→county→city→district, wrong clicks turn red,
-  reload restores progress, final flies to Parliament marker.
+  reload restores progress, final flies to the Tereza marker.

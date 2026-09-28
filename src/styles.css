@@ -82,3 +82,64 @@ body {
 .maplibregl-popup-anchor-right .maplibregl-popup-tip {
   border-left-color: rgba(10, 14, 26, 0.92) !important;
 }
+
+@keyframes invitation-in {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes float-heart {
+  0% { opacity: 0; transform: translateY(12px) scale(0.6) rotate(-8deg); }
+  25% { opacity: 0.85; }
+  100% { opacity: 0; transform: translateY(-90px) scale(1.1) rotate(12deg); }
+}
+
+.invitation-backdrop {
+  animation: backdrop-in 300ms ease-out both;
+}
+
+.invitation-card {
+  animation: invitation-in 500ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+}
+
+.celebration {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.celebration span {
+  position: absolute;
+  bottom: 8%;
+  color: rgba(251, 113, 133, 0.75);
+  animation: float-heart 2.2s ease-out both;
+}
+
+.celebration span:nth-child(1) { left: 8%; animation-delay: 100ms; }
+.celebration span:nth-child(2) { left: 27%; animation-delay: 350ms; }
+.celebration span:nth-child(3) { left: 50%; animation-delay: 50ms; }
+.celebration span:nth-child(4) { left: 72%; animation-delay: 450ms; }
+.celebration span:nth-child(5) { left: 90%; animation-delay: 200ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .invitation-backdrop,
+  .invitation-card {
+    animation-duration: 1ms;
+  }
+
+  .celebration {
+    display: none;
+  }
+}
