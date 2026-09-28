@@ -17,6 +17,8 @@ import {
   loadCountries,
   loadDistrictCandidates,
   loadEuropeBbox,
+  loadStreetBbox,
+  loadStreetCandidates,
   type Candidate,
 } from '../game/data'
 import { useJourney } from '../game/useJourney'
@@ -52,6 +54,7 @@ function Home() {
     loadCounties().catch(() => {})
     loadCityCandidates().catch(() => {})
     loadDistrictCandidates().catch(() => {})
+    loadStreetCandidates().catch(() => {})
   }, [])
 
   const activeDataGroupRef = useRef<string | null>(null)
@@ -66,7 +69,9 @@ function Home() {
           ? 'counties'
           : levelId === 'city' || levelId === 'district'
             ? 'budapest'
-            : null
+            : levelId === 'street'
+              ? 'streets'
+              : null
 
     async function run() {
       try {
@@ -101,6 +106,9 @@ function Home() {
         } else if (levelId === 'district') {
           setFitBounds(bboxToBounds(await loadBudapestBbox()))
           if (!cancelled) setCandidates(await loadDistrictCandidates())
+        } else if (levelId === 'street') {
+          setFitBounds(bboxToBounds(await loadStreetBbox()))
+          if (!cancelled) setCandidates(await loadStreetCandidates())
         }
       } catch (caught) {
         if (!cancelled) {
@@ -176,6 +184,10 @@ function Home() {
         correct = name === currentLevel.targetName
         selectionGroup = name
         break
+      case 'street':
+        correct = name === currentLevel.targetName
+        selectionGroup = name
+        break
     }
 
     pick(correct, selectionGroup)
@@ -198,6 +210,8 @@ function Home() {
         return phone ? 7.2 : 7.9
       case 'district':
         return phone ? 10 : 10.6
+      case 'street':
+        return phone ? 14 : 14.6
       default:
         return phone ? 1.05 : 1.4
     }

@@ -1,4 +1,4 @@
-export type LevelId = "continent" | "country" | "state" | "city" | "district";
+export type LevelId = "continent" | "country" | "state" | "city" | "district" | "street";
 
 export interface LevelConfig {
   id: LevelId;
@@ -59,6 +59,12 @@ export const LEVELS: LevelConfig[] = [
     prompt: "Melyik kerület?",
     targetName: "VI. kerület",
   },
+  {
+    id: "street",
+    label: "Utca",
+    prompt: "Melyik utca?",
+    targetName: "Nagymező utca",
+  },
 ];
 
 /**
@@ -93,12 +99,12 @@ export const DESTINATION: DestinationConfig = {
  */
 export const DATE_NIGHT_END_MS = new Date("2026-09-29T19:00:00+02:00").getTime();
 
-/** Time between consecutive layer unlocks. */
-export const LEVEL_GAP_MS = 2 * 60 * 60 * 1000;
+/** How long before date night the final street round becomes available. */
+export const STREET_UNLOCK_LEAD_MS = 4 * 60 * 60 * 1000;
 
 /**
  * Master switch for the timed layer unlocks. Set to true to re-enable the
- * 2-hour cooldown schedule anchored to DATE_NIGHT_END_MS; while false every
+ * 4-hour street-round guard anchored to DATE_NIGHT_END_MS; while false every
  * layer is available immediately and no cooldown UI (countdown, centered
  * header, darkened globe) appears.
  */
@@ -106,13 +112,12 @@ export const LAYER_COOLDOWN_ENABLED = true;
 
 /**
  * Unlock timestamp for a level index, or null when the layer is available
- * immediately. The first layer is never timed; every later layer opens
- * LEVEL_GAP_MS after the previous one, with the last layer opening
- * LEVEL_GAP_MS before the date night.
+ * immediately. Only the final street round has a scheduled unlock.
  */
 export function unlockTimeForIndex(index: number): number | null {
-  if (!LAYER_COOLDOWN_ENABLED || index <= 0) return null;
-  return DATE_NIGHT_END_MS - (LEVELS.length - index) * LEVEL_GAP_MS;
+  // All earlier rounds stay open; only the final street guess is time-gated.
+  if (!LAYER_COOLDOWN_ENABLED || LEVELS[index]?.id !== "street") return null;
+  return DATE_NIGHT_END_MS - STREET_UNLOCK_LEAD_MS;
 }
 
 export function isUnlocked(index: number, now: number = Date.now()): boolean {

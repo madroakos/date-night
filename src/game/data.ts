@@ -20,6 +20,7 @@ type RawFeature = {
 const WORLD = `${import.meta.env.BASE_URL}data/world.json`
 const COUNTIES = `${import.meta.env.BASE_URL}data/counties.json`
 const BUDAPEST = `${import.meta.env.BASE_URL}data/budapest.json`
+const STREETS = `${import.meta.env.BASE_URL}data/streets.json`
 
 const cache = new Map<string, Promise<RawFeature[]>>()
 const builtCache = new Map<string, Promise<Candidate[]>>()
@@ -164,6 +165,22 @@ export function loadCityCandidates(): Promise<Candidate[]> {
 
 export function loadDistrictCandidates(): Promise<Candidate[]> {
   return loadCityCandidates()
+}
+
+/** Curated streets around the destination in Budapest's VI. district. */
+export function loadStreetCandidates(): Promise<Candidate[]> {
+  return built('streets', async () => {
+    const features = await fetchFeatures(STREETS)
+    return features.map((f, i) => {
+      const name = String(f.properties.name ?? `Street ${i}`)
+      return candidate(f, `street-${i}`, name, 'street', name)
+    })
+  })
+}
+
+export async function loadStreetBbox(): Promise<[number, number, number, number]> {
+  const streets = await loadStreetCandidates()
+  return unionBbox(streets.map((street) => street.bbox))
 }
 
 export async function loadBudapestBbox(): Promise<[number, number, number, number]> {

@@ -134,16 +134,18 @@ export function GlobeMap({
         if (!dataReadyRef.current.ready) return
         try {
           const p = new maplibregl.Point(point.x, point.y)
-          let hits = map.queryRenderedFeatures(p, { layers: ['candidates-fill'] })
+          const pickLayers = ['candidates-fill', 'candidates-line'].filter((id) => map.getLayer(id))
+          if (pickLayers.length === 0) return
+          let hits = map.queryRenderedFeatures(p, { layers: pickLayers })
           if (!hits.length) {
             // forgive near-boundary / tiny-polygon misses with a small padded box
-            const pad = 12
+            const pad = 14
             hits = map.queryRenderedFeatures(
               [
                 [point.x - pad, point.y - pad],
                 [point.x + pad, point.y + pad],
               ],
-              { layers: ['candidates-fill'] },
+              { layers: pickLayers },
             )
           }
           const hit = hits[0]
@@ -160,7 +162,10 @@ export function GlobeMap({
       }
 
       map.on('mousemove', (e) => {
-        const hits = map.queryRenderedFeatures(e.point, { layers: ['candidates-fill'] })
+        const pickLayers = ['candidates-fill', 'candidates-line'].filter((id) => map.getLayer(id))
+        const hits = pickLayers.length
+          ? map.queryRenderedFeatures(e.point, { layers: pickLayers })
+          : []
         map.getCanvas().style.cursor = hits.length ? 'pointer' : ''
       })
 
@@ -285,6 +290,36 @@ export function GlobeMap({
               'fill-outline-color': 'rgba(255,255,255,0.45)',
             },
           })
+          map.addLayer({
+            id: 'candidates-line',
+            type: 'line',
+            source: 'candidates',
+            filter: ['==', ['geometry-type'], 'LineString'],
+            paint: {
+              'line-color': '#f8fafc',
+              'line-width': ['interpolate', ['linear'], ['zoom'], 13, 5, 17, 10],
+              'line-opacity': 0.86,
+              'line-blur': 0.5,
+            },
+          })
+          map.addLayer({
+            id: 'candidate-street-labels',
+            type: 'symbol',
+            source: 'candidates',
+            filter: ['==', ['geometry-type'], 'LineString'],
+            layout: {
+              'symbol-placement': 'line',
+              'text-field': ['get', 'name'],
+              'text-size': 13,
+              'text-allow-overlap': false,
+              'text-padding': 6,
+            },
+            paint: {
+              'text-color': '#ffffff',
+              'text-halo-color': '#101522',
+              'text-halo-width': 2,
+            },
+          })
         }
 
         const cityAreas = dataKey === 'city'
@@ -364,6 +399,24 @@ export function GlobeMap({
         '#22c55e',
         'rgba(255,255,255,0.10)',
       ])
+      if (map.getLayer('candidates-line')) {
+        map.setPaintProperty('candidates-line', 'line-color', [
+          'case',
+          [
+            'any',
+            ['in', ['get', 'groupName'], ['literal', wrongGroups]],
+            ['in', ['get', 'name'], ['literal', wrongGroups]],
+          ],
+          '#ef4444',
+          [
+            'any',
+            ['in', ['get', 'groupName'], ['literal', solvedGroups]],
+            ['in', ['get', 'name'], ['literal', solvedGroups]],
+          ],
+          '#22c55e',
+          '#f8fafc',
+        ])
+      }
     }
 
     runWhenStyled(map, applyPaint)

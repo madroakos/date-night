@@ -86,13 +86,19 @@ function loadSaved(): JourneyState | null {
     ) {
       return null
     }
+    const solved = { ...initialState.solved, ...saved.solved }
+    const addedStreetLevel = typeof saved.solved.street !== 'boolean'
+    const streetIndex = LEVELS.findIndex((level) => level.id === 'street')
+
     return {
-      levelIndex: saved.levelIndex,
-      solved: { ...initialState.solved, ...saved.solved },
+      // Progress saved before the street level existed should continue from
+      // the new final question instead of skipping straight to the invitation.
+      levelIndex: addedStreetLevel && saved.completed ? streetIndex : saved.levelIndex,
+      solved,
       wrongGuesses: { ...emptyWrong(), ...saved.wrongGuesses },
       wrongPulse: 0,
-      completed: Boolean(saved.completed),
-      invitationAccepted: Boolean(saved.invitationAccepted),
+      completed: addedStreetLevel ? false : Boolean(saved.completed),
+      invitationAccepted: addedStreetLevel ? false : Boolean(saved.invitationAccepted),
     }
   } catch {
     return null
