@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FeatureCollection } from 'geojson'
 import type * as MapLibreGL from 'maplibre-gl'
+// Bundle the worker's shared module into the Pages asset instead of copying only its entry file.
+import mapWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import type { Candidate } from '../game/data'
 import { unionBbox } from '../game/data'
 import type { DestinationConfig } from '../game/config'
@@ -89,9 +91,10 @@ export function GlobeMap({
     let cleanupTouch: (() => void) | null = null
 
     async function init() {
-      const maplibregl = await import('maplibre-gl')
-      if (cancelled || !containerRef.current) return
-      maplibreRef.current = maplibregl
+ const maplibregl = await import('maplibre-gl')
+ if (cancelled || !containerRef.current) return
+ maplibreRef.current = maplibregl
+ maplibregl.setWorkerUrl(mapWorkerUrl)
 
       const map = new maplibregl.Map({
         container: containerRef.current,
